@@ -96,6 +96,7 @@ import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow.compat.v1 as tf
 
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 
 tf.app.flags.DEFINE_string('train_directory', '/tmp/',
                            'Training data directory')
@@ -150,7 +151,7 @@ tf.app.flags.DEFINE_string('imagenet_metadata_file',
 # Note that there might exist mulitple bounding box annotations associated
 # with an image file.
 tf.app.flags.DEFINE_string('bounding_box_file',
-                           './imagenet_2012_bounding_boxes.csv',
+                           '/home/Image2012Data/raw-data/imagenet_2012_bounding_boxes.csv',
                            'Bounding box file')
 
 FLAGS = tf.app.flags.FLAGS
@@ -246,6 +247,15 @@ class ImageCoder(object):
     # Initializes function that decodes RGB JPEG data.
     self._decode_jpeg_data = tf.placeholder(dtype=tf.string)
     self._decode_jpeg = tf.image.decode_jpeg(self._decode_jpeg_data, channels=3)
+    
+    # Encode resized image data.
+    self._encode_jpeg_data = tf.placeholder(dtype=tf.uint8)
+    self._offset_h = tf.placeholder(dtype=tf.int32)
+    self._offset_w = tf.placeholder(dtype=tf.int32)
+    self._crop = tf.placeholder(dtype=tf.int32)
+    crop_img = tf.image.crop_to_bounding_box(self._encode_jpeg_data,offset_height=self._offset_h,offset_width=self._offset_w,
+                                                   target_height=self._crop,target_width=self._crop)
+    self._encode_jpeg = tf.image.encode_jpeg(crop_img, format='rgb', quality=100)
 
   def png_to_jpeg(self, image_data):
     return self._sess.run(self._png_to_jpeg,
@@ -261,6 +271,12 @@ class ImageCoder(object):
     assert len(image.shape) == 3
     assert image.shape[2] == 3
     return image
+  
+  def encode_jpeg(self, image_data, offset_h, offset_w, crop):
+    return self._sess.run(self._encode_jpeg, feed_dict={self._encode_jpeg_data: image_data,
+                                                        self._offset_h: offset_h,
+                                                        self._offset_w: offset_w,
+                                                        self._crop: crop})
 
 
 def _is_png(filename):
@@ -314,7 +330,7 @@ def _process_image(filename, coder):
     width: integer, image width in pixels.
   """
   # Read the image file.
-  image_data = tf.gfile.GFile(filename, 'r').read()
+  image_data = tf.gfile.GFile(filename, 'rb').read()
 
   # Clean the dirty data.
   if _is_png(filename):
@@ -334,8 +350,16 @@ def _process_image(filename, coder):
   height = image.shape[0]
   width = image.shape[1]
   assert image.shape[2] == 3
+  
+  crop = tf.minimum(height, width)
+  offset_h = (tf.cast(height, dtype=tf.float64)-tf.cast(crop, dtype=tf.float64))/2
+  offset_w = (tf.cast(width, dtype=tf.float64)-tf.cast(crop, dtype=tf.float64))/2
+  crop = tf.cast(crop, dtype=tf.int32)
+  offset_h = tf.cast(offset_h, dtype=tf.int32)
+  offset_w = tf.cast(offset_w, dtype=tf.int32)
+  image_data = coder.encode_jpeg(image, offset_h, offset_w, crop)
 
-  return image_data, height, width
+  return image_data, crop, crop
 
 
 def _process_image_files_batch(coder, thread_index, ranges, name, filenames,
@@ -525,7 +549,7 @@ def _find_image_files(data_dir, labels_file):
   # Shuffle the ordering of all image files in order to guarantee
   # random ordering of the images with respect to label in the
   # saved TFRecord files. Make the randomization repeatable.
-  shuffled_index = range(len(filenames))
+  shuffled_index = list(range(len(filenames)))
   random.seed(12345)
   random.shuffle(shuffled_index)
 
@@ -697,8 +721,8 @@ def main(unused_argv):
   # Run it!
   _process_dataset('validation', FLAGS.validation_directory,
                    FLAGS.validation_shards, synset_to_human, image_to_bboxes)
-  _process_dataset('train', FLAGS.train_directory, FLAGS.train_shards,
-                   synset_to_human, image_to_bboxes)
+  # _process_dataset('train', FLAGS.train_directory, FLAGS.train_shards,
+  #                  synset_to_human, image_to_bboxes)
 
 
 if __name__ == '__main__':

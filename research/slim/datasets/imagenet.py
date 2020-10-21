@@ -86,16 +86,18 @@ def create_readable_names_for_imagenet_labels():
   """
 
   # pylint: disable=g-line-too-long
-  base_url = 'https://raw.githubusercontent.com/tensorflow/models/master/research/inception/inception/data/'
+  base_url = 'https://github.com/tensorflow/models/tree/master/research/slim/datasets'
   synset_url = '{}/imagenet_lsvrc_2015_synsets.txt'.format(base_url)
   synset_to_human_url = '{}/imagenet_metadata.txt'.format(base_url)
 
   filename, _ = urllib.request.urlretrieve(synset_url)
+  filename = '/home/wzx-vcm/datasets/imagenet_lsvrc_2015_synsets.txt'
   synset_list = [s.strip() for s in open(filename).readlines()]
   num_synsets_in_ilsvrc = len(synset_list)
   assert num_synsets_in_ilsvrc == 1000
 
   filename, _ = urllib.request.urlretrieve(synset_to_human_url)
+  filename = '/home/wzx-vcm/datasets/imagenet_metadata.txt'
   synset_to_human_list = open(filename).readlines()
   num_synsets_in_all_imagenet = len(synset_to_human_list)
   assert num_synsets_in_all_imagenet == 21842
